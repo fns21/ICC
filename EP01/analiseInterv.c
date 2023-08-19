@@ -1,27 +1,8 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <float.h>
-#include <math.h>
-#include <fenv.h>
+#include "analiseInterv.h"
 
-#define QUASEZERO 1e-45
+float calculaMenorNumMaquina(float num){
 
-typedef struct {
-    double maior;
-    double menor;
-} Interval_t;
-
-typedef struct {
-    double erroAbs;
-    double erroRel;
-    int ULPs;
-} Precisao_t;
-
-//Calcula o maior numero de maquina menor ou igual a num (subtrai de num, o epsilon relativo)
-double calculaMenorNumMaquina(double num){
-
-    double menorNum;
+    float menorNum;
     
     if(fabs(num) <= QUASEZERO)
         menorNum = 0;
@@ -31,10 +12,9 @@ double calculaMenorNumMaquina(double num){
     return menorNum;
 }
 
-//Calcula o menor numero de maquina maior ou igual a num (soma o epsilon relativo ao num)
-double calculaMaiorNumMaquina(double num){
+float calculaMaiorNumMaquina(float num){
 
-    double maiorNum;
+    float maiorNum;
 
     if(fabs(num) <= QUASEZERO)
         maiorNum = 0;
@@ -44,156 +24,50 @@ double calculaMaiorNumMaquina(double num){
     return maiorNum;
 }
 
-//Operações Intervalares
-//Soma
-Interval_t somaIntervalo(Interval_t x, Interval_t y){
+float erroAbsoluto(Interval_t interv){
 
-    Interval_t soma;
-    double somaMenor, somaMaior;
+    return fabs(interv.maior.f - interv.menor.f);
+}
+
+float erroRelativo(Interval_t interv){
     
-    somaMenor = x.menor + y.menor;
-    somaMaior = x.maior + y.maior;
-
-    soma.menor = calculaMenorNumMaquina(somaMenor);
-    soma.maior = calculaMaiorNumMaquina(somaMaior);
-    return soma;
-}
-
-//Multiplica
-Interval_t mulIntervalo(Interval_t x, Interval_t y){
-
-    Interval_t mul;
-    double mulMenor, mulMaior;
-    double a, b, c, d;
-
-    a = x.menor;
-    b = x.maior;
-    c = y.menor;
-    d = y.maior;
-
-    mulMenor = fmin(fmin((a * c), (a * d)), fmin((b * c), (b * d)));
-    mulMaior = fmax(fmax((a * c), (a * d)), fmax((b * c), (b * d)));
- 
-    mul.menor = calculaMenorNumMaquina(mulMenor);
-    mul.maior = calculaMaiorNumMaquina(mulMaior);
-
-    return mul;
-}
-
-//Subtrai
-Interval_t subIntervalo(Interval_t x, Interval_t y){
-    
-    Interval_t sub;
-    double subMenor, subMaior;
-
-    subMenor = x.menor - y.maior;
-    subMaior = x.maior - y.menor;
-
-    sub.menor = calculaMenorNumMaquina(subMenor);
-    sub.maior = calculaMaiorNumMaquina(subMaior);
-    return sub;
-}
-
-//Divide
-Interval_t divIntervalo(Interval_t x, Interval_t y){
-    
-    Interval_t div;
-    double divMenor, divMaior;
-    double a, b, c, d;
-
-    a = x.menor;
-    b = x.maior;
-    c = y.menor;
-    d = y.maior;
-
-    if(fabs(c) >= QUASEZERO && fabs(d) >= QUASEZERO){
-        divMenor = fminf(fminf((a * (1 / d)), (a * (1 / c))), fminf((b * (1 / d)), (b * (1 / c))));
-        divMaior = fmaxf(fmaxf((a * (1 / d)), (a * (1 / c))), fmaxf((b * (1 / d)), (b * (1 / c))));
-    }
-    else{
-        divMenor = -INFINITY;
-        divMaior = INFINITY;
-    }
-
-    div.menor = calculaMenorNumMaquina(divMenor);
-    div.maior = calculaMaiorNumMaquina(divMaior);
-    return div;
-}
-
-
-double erroAbsoluto(Interval_t interv){
-
-    return fabs(interv.maior - interv.menor);
-}
-
-double erroRelativo(Interval_t interv){
-    
-    if(fabs(interv.menor) >= QUASEZERO)
-        return fabs(interv.maior - interv.menor) / interv.menor;
+    if(fabs(interv.menor.f) >= QUASEZERO)
+        return erroAbsoluto(interv) / fabs(interv.menor.f);
     
     return INFINITY; 
 }
 
 int ULP(Interval_t interv){
     
-    double diff = fabs(interv.maior - interv.menor);
-    int ulp = diff / fminf(fabs(interv.maior), fabs(interv.menor));  
+    int ulp;
+
+    ulp = abs(interv.menor.i - interv.maior.i) - 1;
+
+    if(ulp < 0)
+        return 0;
+
+    return ulp;
 }
 
-Interval_t opcoesOperacoes(Interval_t x, Interval_t y, char op, Precisao_t pres){
+void atribuiIntervNumMaq(Interval_t nx[], float x[]){
 
-    Interval_t result;    
-    
-    switch(op){
-        case '+':
-            result = somaIntervalo(x, y);
-            break;
-        case '-':
-            result = subIntervalo(x, y);
-            break;
-        case '*':
-            result = mulIntervalo(x, y);
-            break;
-        case '/':
-            result = divIntervalo(x, y);
-            break;
-    }
-
-    pres.erroAbs = erroAbsoluto(result);
-    printf("%1.8e\n", pres.erroAbs);
-    pres.erroRel = erroRelativo(result);
-    printf("%1.8e\n", pres.erroRel);
-    pres.ULPs = ULP(result);
-    return result;
-}
-
-void atribuiIntervNumMaq(Interval_t nx[], double x[]){
     for (int i = 0; i < 5; i++) {
-        nx[i].menor = calculaMenorNumMaquina(x[i]);
-        nx[i].maior = calculaMaiorNumMaquina(x[i]);
+        nx[i].menor.f = calculaMenorNumMaquina(x[i]);
+        nx[i].maior.f = calculaMaiorNumMaquina(x[i]);
     }
 }
 
-int main (){
+void imprime(Interval_t result[], Interval_t nx[], Precisao_t pres[], char op[]){
 
-    double x[5], erroAbs;
-    char o[4];
-    Interval_t result[4], nx[5];
-    Precisao_t pres[4];
-    
-    fscanf(stdin, "%lf %c %lf %c %lf %c %lf %c %lf", &x[0], &o[0], &x[1], &o[1], &x[2], &o[2], &x[3], &o[3], &x[4]);
-    getc(stdin);
-    while(!feof(stdin)){
-        atribuiIntervNumMaq(nx, x);
-        result[0] = opcoesOperacoes(nx[0], nx[1], o[0], pres[0]);
-        result[1] = opcoesOperacoes(result[0], nx[2], o[1], pres[1]);
-        result[2] = opcoesOperacoes(result[1], nx[3], o[2], pres[2]);
-        result[3] = opcoesOperacoes(result[2], nx[4], o[3], pres[3]);
-        fscanf(stdin, "%lf %c %lf %c %lf %c %lf %c %lf", &x[0], &o[0], &x[1], &o[1], &x[2], &o[2], &x[3], &o[3], &x[4]);
-        getc(stdin);
+    printf("%d:\n", 1);
+    printf("[%1.8e, %1.8e] %c [%1.8e, %1.8e] = \n", nx[0].menor.f, nx[0].maior.f, op[0], nx[1].menor.f, nx[1].maior.f);
+    printf("[%1.8e, %1.8e]\n", result[0].menor.f, result[0].maior.f);
+    printf("EA: %1.8e, ER: %1.8e, ULPs: %d\n\n", pres[0].erroAbs, pres[0].erroRel, pres[0].ULPs);
+    for(int i = 1; i < 4; i++){
+        printf("%d:\n", i+1);
+        printf("[%1.8e, %1.8e] %c [%1.8e, %1.8e] = \n", result[i-1].menor.f, result[i-1].maior.f, op[i], nx[i+1].menor.f, nx[i+1].maior.f);
+        printf("[%1.8e, %1.8e]\n", result[i].menor.f, result[i].maior.f);
+        printf("EA: %1.8e, ER: %1.8e, ULPs: %d\n\n", pres[i].erroAbs, pres[i].erroRel, pres[i].ULPs);
     }
-    
-    //printf("Erro Absoluto1: %1.8e, Erro Relativo1: %1.8e\n Erro Absoluto2: %1.8e, Erro Relativo2: %1.8e\n Erro Absoluto3: %1.8e, Erro Relativo3: %1.8e\n Erro Absoluto4: %1.8e, Erro Relativo4: %1.8e\n", pres[0].erroAbs, pres[0].erroRel, pres[1].erroAbs, pres[1].erroRel, pres[2].erroAbs, pres[2].erroRel, pres[3].erroAbs, pres[3].erroRel);
-    printf("%1.8e, %1.8e, %1.8e, %1.8e, Menor: %1.8e, Maior: %1.8e\n", nx[0].menor, nx[0].maior, nx[1].menor, nx[1].maior, result[0].menor, result[0].maior); 
-    return 0;
+    printf("========================================================\n");
 }
